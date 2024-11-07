@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_DEFAULT_REGION = 'us-east-1'
+        TERRAFORM_VERSION = '1.5.0'
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                sh '''
+                    wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                    unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                    mv terraform /usr/local/bin/
+                '''
+            }
+        }
+        
+        stage('Init') {
+            steps {
+                sh 'terraform init'
+            }
+        }
+        
+        stage('Plan') {
+            steps {
+                sh 'terraform plan -out=tfplan'
+            }
+        }
+        
+        stage('Approve') {
+            steps {
+                input message: 'Do you want to apply this plan?'
+            }
+        }
+        
+        stage('Apply') {
+            steps {
+                sh 'terraform apply -auto-approve tfplan'
+            }
+        }
+        
+        stage('Security Verification') {
+            steps {
+                sh '''
+                    # Verify Security Hub is enabled
+                    aws securityhub get-enabled-standards
+                    
+                    # Verify GuardDuty is enabled
+                    aws guardduty list-detectors
+                    
+                    # Verify Macie is enabled
+                    aws macie2 get-macie-session
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
